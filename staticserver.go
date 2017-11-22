@@ -5,10 +5,12 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
-	"strconv"
+	//"strconv"
 	"time"
 )
 
@@ -45,9 +47,31 @@ func (*Myhandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if ok, _ := regexp.MatchString("/css/", r.URL.String()); ok {
 		http.StripPrefix("/css/", http.FileServer(http.Dir("./css/"))).ServeHTTP(w, r)
 	} else {
-		http.StripPrefix("/", http.FileServer(http.Dir("./upload/"))).ServeHTTP(w, r)
+		filePath := "./upload" + r.URL.String()
+		filedir, _ := filepath.Abs(filePath)
+		// 下载文件到本地
+		//http.StripPrefix("/", http.FileServer(http.Dir("./upload/"))).ServeHTTP(w, r)
+		downloadFile(filedir, w)
 	}
 
+}
+
+func downloadFile(fileFullPath string, w http.ResponseWriter) {
+	file, err := os.Open(fileFullPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	fileName := path.Base(fileFullPath)
+	fileName = url.QueryEscape(fileName) // 防止中文乱码
+	w.Header().Set("Content-Disposition", "attachment; filename="+fileName)
+	_, error := io.Copy(w, file)
+	if error != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 func upload(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +91,9 @@ func upload(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "%v", "不允许的上传类型")
 			return
 		}
-		filename := strconv.FormatInt(time.Now().Unix(), 10) + fileext
+		//filename := strconv.FormatInt(time.Now().Unix(), 10) + fileext
+		// 用原来的文件名
+		filename := handler.Filename
 		f, _ := os.OpenFile(Upload_Dir+filename, os.O_CREATE|os.O_WRONLY, 0660)
 		_, err = io.Copy(f, file)
 		if err != nil {
